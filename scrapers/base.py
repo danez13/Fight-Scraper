@@ -72,9 +72,9 @@ class BaseScraper(ABC):
 
     def quit(self, error:bool):
         if error:
-            self.save(direct=True)
-        else:
             self.save(direct=False)
+        else:
+            self.save(direct=True)
             self.remove_existing_file("temp_events.csv")
             self.remove_existing_file("temp_fights.csv")
 
