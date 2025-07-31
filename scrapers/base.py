@@ -56,7 +56,9 @@ class BaseScraper(ABC):
             df = pd.DataFrame(new_data)
 
             if current_data is not None and not self.update:
-                df = pd.concat([current_data, df]).drop_duplicates(subset=subset, keep="last")
+                df = pd.concat([df,current_data]).drop_duplicates(subset=subset, keep="last")
+            elif current_data is not None:
+                df = pd.concat([current_data,df]).drop_duplicates(subset=subset, keep="last")
 
             df.to_csv(filename, index=False)
             logger.info(f"Data saved to {filename}")
