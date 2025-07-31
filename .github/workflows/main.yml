@@ -24,7 +24,7 @@ jobs:
           pip install -r requirements.txt || true
 
       - name: Run scraper
-        run: python scraper.py
+        run: python main.py -H
 
       - name: Commit and push if data.csv changed
         run: |
