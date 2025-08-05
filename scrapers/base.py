@@ -34,7 +34,7 @@ class BaseScraper(ABC):
 
         # Load or initialize data
         self.current_events = self.initialize_data("Events.csv", ["id", "title", "date", "location", "fights"])
-        self.current_fights = self.initialize_data("Fights.csv", ["fight_id", "event_id", "link", "red_name", "red_nickname", "red_result", "red_link", "blue_name", "blue_nickname", "blue_result", "blue_link"])
+        self.current_fights = self.initialize_data("Fights.csv", ["fight_id", "event_id", "link", "weight","method","round","time","total_rounds","total_time", "red_name", "red_nickname", "red_result", "red_link", "blue_name", "blue_nickname", "blue_result", "blue_link"])
 
         self.new_events = []
         self.new_fights = []

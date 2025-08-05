@@ -55,7 +55,7 @@ class UFCStatsScraper(BaseScraper):
 
         event_id = link.split("/")[-1]
 
-        if self.current_events is not None and event_id in self.current_events["id"].values:
+        if self.current_events is not None and event_id in self.current_events["id"].values and not self.update:
             logger.info(f"Event {event_id} already exists. Skipping.")
             return None
 
@@ -72,6 +72,7 @@ class UFCStatsScraper(BaseScraper):
 
         fight_ids = []
         for fight_link in fight_links:
+            logger.info(f"Processing fight link: {fight_link}")
             fight_id = self.get_fight_details(fight_link, event_id)
             if fight_id:
                 fight_ids.append(fight_id)
@@ -121,8 +122,43 @@ class UFCStatsScraper(BaseScraper):
             fighter_type = "red" if index == 0 else "blue"
             details = self.get_fight_fighter_details(fighter_type, fighter)
             fighters_details.update(details)
+        
+        bout_type = self.driver.find_element(By.CSS_SELECTOR, ".b-fight-details__fight-title").text.strip()
+        bout_type = bout_type.replace("BOUT", "").strip()
 
-        fight_details = {"fight_id": fight_id, "event_id": event_id, "link": link}
+        # Get method, round, time, referee
+        method = self.driver.find_element(By.CSS_SELECTOR, ".b-fight-details__text-item_first").text.strip()
+        if method == "Other":
+            method = "DRAW"
+        info_items = self.driver.find_elements(By.CSS_SELECTOR, ".b-fight-details__text-item")
+        round_ = fight_time = total_rounds = total_time = ""
+        judges = []
+
+        for item in info_items[:3]:
+            label = item.find_element(By.CSS_SELECTOR, ".b-fight-details__label").text.strip()
+            text = item.text.replace(label, '').strip()
+
+            if label == "ROUND:":
+                round_ = text
+            elif label == "TIME:":
+                fight_time = text
+            elif label == "TIME FORMAT:":
+
+                if text == "No Time Limit":
+                    total_rounds = "1"
+                    total_time = "No Time Limit"
+                elif text.startswith("1 Rnd +"):
+                    total_rounds = "1"
+                    raw_time = text.split("(")
+                else:
+                    format = text.split(" ")
+                    total_rounds = format[0]
+                    total_time = sum(int(round_time.strip("()")) for round_time in format[-1].split("-"))
+
+
+        fight_details = {"fight_id": fight_id, "event_id": event_id, "link": link, "weight": bout_type,
+                         "method": method, "round": round_, "time": fight_time, "total_rounds": total_rounds,
+                         "total_time": total_time}
         self.new_fights.append(fight_details | fighters_details)
 
         logger.info(f"Scraped fight {fight_id} for event {event_id}")
