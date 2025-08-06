@@ -17,7 +17,6 @@ if __name__ == "__main__":
     )
 
     # Scraper arguments
-    parser.add_argument("-H", "--headless", action="store_true", help="scrape in headless mode (do not display browser window)")
     parser.add_argument("-c", "--continuous", action="store_true", help="scrape even if previously scraped entries are present")
     parser.add_argument("-w", "--wait", help="set maximum page load wait time", default=10)
     parser.add_argument("-d", "--direct", action="store_true", help="save scraped data directly to final csv files rather than to a separate csv file")
@@ -28,7 +27,6 @@ if __name__ == "__main__":
     logger.debug("Parsed CLI arguments: %s", args)
 
     scraper = UFCStatsScraper(
-        headless=args.headless,
         wait_time=args.wait,
         continuous=args.continuous,
         direct=args.direct,

@@ -1,17 +1,13 @@
 import logging
+from bs4 import BeautifulSoup
 from .base import BaseScraper
-from selenium.webdriver.common.by import By
-from selenium.webdriver.remote.webelement import WebElement
-from selenium.webdriver.support import expected_conditions as EC
-from selenium.common.exceptions import TimeoutException
 
 logger = logging.getLogger(__name__)
 
 class UFCStatsScraper(BaseScraper):
-    def __init__(self, headless: bool, wait_time: int, continuous: bool, direct: bool, pre_linked: bool, update: bool):
+    def __init__(self, wait_time: int, continuous: bool, direct: bool, pre_linked: bool, update: bool):
         super().__init__(
             base_url="http://www.ufcstats.com/",
-            headless=headless,
             wait_time=wait_time,
             continuous=continuous,
             direct=direct,
@@ -19,38 +15,26 @@ class UFCStatsScraper(BaseScraper):
             update=update
         )
 
-    def get_event_listing_links(self, page) -> list[str] | None:
-        logger.debug(f"Fetching event listing page {page}")
-        self.driver.get(self.base_url + f"statistics/events/completed?page={page}")
-
-        try:
-            self.wait.until(EC.presence_of_all_elements_located((By.CSS_SELECTOR, "tr.b-statistics__table-row")))
-        except TimeoutException:
-            logger.warning(f"Event cards did not load in time on page {page}")
+    def get_event_listing_links(self, page: int) -> list[str] | None:
+        url = self.base_url + f"statistics/events/completed?page={page}"
+        logger.debug(f"Fetching event listing page {page}: {url}")
+        soup = self.fetch_soup(url)
+        if soup is None:
             return None
 
-        rows = self.driver.find_elements(By.CSS_SELECTOR, "tr.b-statistics__table-row")
+        rows = soup.select("tr.b-statistics__table-row")
         links = []
         for row in rows:
-            try:
-                event_name_elem = row.find_element(By.CSS_SELECTOR, "a.b-link")
-                event_url = event_name_elem.get_attribute("href")
-                links.append(event_url)
-            except Exception as e:
-                logger.debug("Skipping row without expected content: %s", e)
-                continue
-
+            link_tag = row.select_one("a.b-link")
+            if link_tag and link_tag.get("href"):
+                links.append(link_tag["href"])
         logger.info(f"Found {len(links)} events on page {page}")
         return links
 
-    def get_event_details(self, link) -> dict | None:
+    def get_event_details(self, link: str) -> dict | None:
         logger.info(f"Scraping event details from {link}")
-        self.driver.get(link)
-
-        try:
-            self.wait.until(EC.presence_of_all_elements_located((By.CSS_SELECTOR, "section.b-statistics__section_details")))
-        except TimeoutException:
-            logger.warning(f"Event page '{link}' did not load in time.")
+        soup = self.fetch_soup(link)
+        if soup is None:
             return None
 
         event_id = link.split("/")[-1]
@@ -60,20 +44,27 @@ class UFCStatsScraper(BaseScraper):
             return None
 
         try:
-            event_title = self.driver.find_element(By.CSS_SELECTOR, "span.b-content__title-highlight").text.strip()
-            event_date = self.driver.find_element(By.CSS_SELECTOR, "li.b-list__box-list-item:nth-child(1)").text.replace("DATE:", "").strip()
-            event_location = self.driver.find_element(By.CSS_SELECTOR, "li.b-list__box-list-item:nth-child(2)").text.replace("LOCATION:", "").strip()
+            title_elem = soup.select_one("span.b-content__title-highlight")
+            date_elem = soup.select_one("li.b-list__box-list-item:nth-child(1)")
+            location_elem = soup.select_one("li.b-list__box-list-item:nth-child(2)")
+
+            event_title = title_elem.text.strip() if title_elem else ""
+            event_date = date_elem.text.replace("DATE:", "").strip() if date_elem else ""
+            event_location = location_elem.text.replace("LOCATION:", "").strip() if location_elem else ""
         except Exception as e:
             logger.error(f"Failed to parse basic event details from {link}: {e}")
             return None
 
-        rows = self.driver.find_elements(By.CSS_SELECTOR, "tbody.b-fight-details__table-body tr.js-fight-details-click")
-        fight_links = [row.get_attribute("data-link") for row in rows]
+        fight_rows = soup.select("tbody.b-fight-details__table-body tr.js-fight-details-click")
+        fight_links = [row.get("data-link") for row in fight_rows if row.get("data-link")]
 
         fight_ids = []
         for fight_link in fight_links:
             logger.info(f"Processing fight link: {fight_link}")
-            fight_id = self.get_fight_details(fight_link, event_id)
+            if fight_link is not None:
+                fight_id = self.get_fight_details(str(fight_link), event_id)
+            else:
+                fight_id = None
             if fight_id:
                 fight_ids.append(fight_id)
             else:
@@ -88,83 +79,109 @@ class UFCStatsScraper(BaseScraper):
             "fights": fight_ids
         }
 
-    def get_fight_fighter_details(self, type: str, content: WebElement) -> dict:
-        name = content.find_element(By.CSS_SELECTOR, "h3.b-fight-details__person-name a").text.strip()
-        nickname = content.find_element(By.CSS_SELECTOR, "p.b-fight-details__person-title").text.strip().replace('"', "")
-        result = content.find_element(By.CSS_SELECTOR, "i.b-fight-details__person-status").text.strip()
+    from bs4 import Tag
 
-        result_map = {"W": "WIN", "L": "LOSS", "D": "DRAW"}
-        result = result_map.get(result, "NO CONTEST")
+    def get_fight_fighter_details(self, type: str, content: Tag) -> dict:
+        try:
+            name_elem = content.select_one("h3.b-fight-details__person-name a")
+            name = name_elem.text.strip() if name_elem else ""
+            nickname_elem = content.select_one("p.b-fight-details__person-title")
+            nickname = nickname_elem.text.strip().replace('"', "") if nickname_elem else ""
+            result_elem = content.select_one("i.b-fight-details__person-status")
+            result = result_elem.text.strip() if result_elem else "NO CONTEST"
 
-        fighter_link = content.find_element(By.CSS_SELECTOR, "h3.b-fight-details__person-name a").get_attribute("href")
+            result_map = {"W": "WIN", "L": "LOSS", "D": "DRAW"}
+            result = result_map.get(result, "NO CONTEST")
 
-        return {
-            f"{type}_name": name,
-            f"{type}_nickname": nickname,
-            f"{type}_result": result,
-            f"{type}_link": fighter_link,
-        }
+            fighter_link_elem = content.select_one("h3.b-fight-details__person-name a")
+            fighter_link = fighter_link_elem.get("href") if fighter_link_elem else ""
 
-    def get_fight_details(self, link, event_id) -> str | None:
+            return {
+                f"{type}_name": name,
+                f"{type}_nickname": nickname,
+                f"{type}_result": result,
+                f"{type}_link": fighter_link,
+            }
+        except Exception as e:
+            logger.warning(f"Failed to extract fighter ({type}) details: {e}")
+            return {
+                f"{type}_name": "",
+                f"{type}_nickname": "",
+                f"{type}_result": "NO CONTEST",
+                f"{type}_link": ""
+            }
+
+    def get_fight_details(self, link: str, event_id: str) -> str | None:
         fight_id = link.split("/")[-1]
         logger.debug(f"Scraping fight {fight_id} from {link}")
-        self.driver.get(link)
-
-        try:
-            self.wait.until(EC.presence_of_all_elements_located((By.CSS_SELECTOR, "section.b-statistics__section_details")))
-        except TimeoutException:
-            logger.warning(f"Fight page '{link}' did not load.")
+        soup = self.fetch_soup(link)
+        if soup is None:
             return None
 
-        fighters = self.driver.find_elements(By.CSS_SELECTOR, ".b-fight-details__person")
+        fighters = soup.select(".b-fight-details__person")
         fighters_details = {}
         for index, fighter in enumerate(fighters):
             fighter_type = "red" if index == 0 else "blue"
             details = self.get_fight_fighter_details(fighter_type, fighter)
             fighters_details.update(details)
-        
-        bout_type = self.driver.find_element(By.CSS_SELECTOR, ".b-fight-details__fight-title").text.strip()
-        bout_type = bout_type.replace("BOUT", "").strip()
 
-        # Get method, round, time, referee
-        method = self.driver.find_element(By.CSS_SELECTOR, ".b-fight-details__text-item_first").text.strip()
+        bout_elem = soup.select_one(".b-fight-details__fight-title")
+        bout_type = bout_elem.text.replace("BOUT", "").strip() if bout_elem else ""
+
+        method_elem = soup.select_one(".b-fight-details__text-item_first")
+        method = method_elem.text.strip() if method_elem else ""
         if method == "Other":
             method = "DRAW"
-        info_items = self.driver.find_elements(By.CSS_SELECTOR, ".b-fight-details__text-item")
-        round_ = fight_time = total_rounds = total_time = ""
-        judges = []
+
+        info_items = soup.select(".b-fight-details__text-item")
+        round_, fight_time, total_rounds, total_time = "", "", "", ""
 
         for item in info_items[:3]:
-            label = item.find_element(By.CSS_SELECTOR, ".b-fight-details__label").text.strip()
-            text = item.text.replace(label, '').strip()
+            label_elem = item.select_one(".b-fight-details__label")
+            if not label_elem:
+                continue
+            label = label_elem.text.strip()
+            text = item.text.replace(label, "").strip()
 
             if label == "ROUND:":
                 round_ = text
             elif label == "TIME:":
                 fight_time = text
             elif label == "TIME FORMAT:":
-
                 if text == "No Time Limit":
                     total_rounds = "1"
                     total_time = "No Time Limit"
                 elif text.startswith("1 Rnd +"):
                     total_rounds = "1"
-                    raw_time = text.split("(")
+                    total_time = "OT"
                 else:
-                    format = text.split(" ")
-                    total_rounds = format[0]
-                    total_time = sum(int(round_time.strip("()")) for round_time in format[-1].split("-"))
+                    try:
+                        format_parts = text.split(" ")
+                        total_rounds = format_parts[0]
+                        time_per_round = format_parts[-1].replace("(", "").replace(")", "")
+                        minutes, seconds = map(int, time_per_round.split("-"))
+                        total_time = str(int(total_rounds) * (minutes * 60 + seconds))
+                    except Exception as e:
+                        logger.warning(f"Could not parse time format: {text} — {e}")
+                        total_time = ""
 
+        fight_details = {
+            "fight_id": fight_id,
+            "event_id": event_id,
+            "link": link,
+            "weight": bout_type,
+            "method": method,
+            "round": round_,
+            "time": fight_time,
+            "total_rounds": total_rounds,
+            "total_time": total_time
+        }
 
-        fight_details = {"fight_id": fight_id, "event_id": event_id, "link": link, "weight": bout_type,
-                         "method": method, "round": round_, "time": fight_time, "total_rounds": total_rounds,
-                         "total_time": total_time}
         self.new_fights.append(fight_details | fighters_details)
-
         logger.info(f"Scraped fight {fight_id} for event {event_id}")
         return fight_id
 
-    def scrape_links(self, links: list):
+    def scrape_links(self, links: list) -> bool:
         for link in links:
             logger.info(f"Processing event link: {link}")
             details = self.get_event_details(link)
