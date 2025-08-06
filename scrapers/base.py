@@ -1,40 +1,37 @@
-# Import necessary libraries
 import os
 import logging
 from abc import ABC, abstractmethod
-from selenium import webdriver
-from selenium.webdriver.support.ui import WebDriverWait
+import requests
+from bs4 import BeautifulSoup
 import pandas as pd
+from typing import Optional
 
 logger = logging.getLogger(__name__)
 
 class BaseScraper(ABC):
-    def __init__(self, base_url: str, headless: bool, wait_time: int, continuous: bool, direct: bool, pre_linked: bool, update: bool):
+    def __init__(self, base_url: str, wait_time: int, continuous: bool, direct: bool, pre_linked: bool, update: bool):
         self.base_url = base_url
         self.continuous = continuous
         self.direct = direct
         self.pre_linked = pre_linked
         self.update = update
+        self.wait_time = wait_time  # still kept if used in retry loops
 
-        options = webdriver.ChromeOptions()
+        self.session = requests.Session()
+        self.headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
+            "Accept-Language": "en-US,en;q=0.9",
+        }
 
-        # Configure browser options
-        if headless:
-            options.add_argument("--headless=new")
-        options.add_argument("--disable-gpu")
-        options.add_argument("--no-sandbox")
-        options.add_argument("--disable-dev-shm-usage")
-        options.add_argument("--ignore-certificate-errors")
-        options.add_argument("--disable-software-rasterizer")
-        options.add_argument("--log-level=3")  # Silence ChromeDriver output
-
-        logger.debug("Initializing Chrome WebDriver")
-        self.driver = webdriver.Chrome(options=options)
-        self.wait = WebDriverWait(self.driver, wait_time)
+        logger.debug("Initialized BeautifulSoup scraper with requests.Session")
 
         # Load or initialize data
         self.current_events = self.initialize_data("Events.csv", ["id", "title", "date", "location", "fights"])
-        self.current_fights = self.initialize_data("Fights.csv", ["fight_id", "event_id", "link", "weight","method","round","time","total_rounds","total_time", "red_name", "red_nickname", "red_result", "red_link", "blue_name", "blue_nickname", "blue_result", "blue_link"])
+        self.current_fights = self.initialize_data("Fights.csv", [
+            "fight_id", "event_id", "link", "weight", "method", "round", "time", "total_rounds", "total_time",
+            "red_name", "red_nickname", "red_result", "red_link",
+            "blue_name", "blue_nickname", "blue_result", "blue_link"
+        ])
 
         self.new_events = []
         self.new_fights = []
@@ -46,6 +43,16 @@ class BaseScraper(ABC):
         except Exception as e:
             logger.warning(f"Could not load {filename}, initializing empty DataFrame. Reason: {e}")
             return pd.DataFrame(columns=columns)
+    def fetch_soup(self, url: str) -> Optional[BeautifulSoup]:
+        try:
+            logger.debug(f"Fetching URL: {url}")
+            response = self.session.get(url, headers=self.headers, timeout=self.wait_time)
+            response.raise_for_status()
+            return BeautifulSoup(response.text, "html.parser")
+        except requests.RequestException as e:
+            logger.error(f"Failed to fetch {url}: {e}")
+            return None
+            return None
 
     @abstractmethod
     def run(self):
@@ -56,9 +63,9 @@ class BaseScraper(ABC):
             df = pd.DataFrame(new_data)
 
             if current_data is not None and not self.update:
-                df = pd.concat([df,current_data]).drop_duplicates(subset=subset, keep="last")
+                df = pd.concat([df, current_data]).drop_duplicates(subset=subset, keep="last")
             elif current_data is not None:
-                df = pd.concat([current_data,df]).drop_duplicates(subset=subset, keep="last")
+                df = pd.concat([current_data, df]).drop_duplicates(subset=subset, keep="last")
 
             df.to_csv(filename, index=False)
             logger.info(f"Data saved to {filename}")
@@ -84,9 +91,6 @@ class BaseScraper(ABC):
             self.save(direct=True)
             self.remove_existing_file("temp_events.csv")
             self.remove_existing_file("temp_fights.csv")
-
-        logger.debug("Closing browser")
-        self.driver.quit()
 
     def remove_existing_file(self, filename):
         if os.path.exists(filename):
