@@ -6,13 +6,14 @@ logger = logging.getLogger(__name__)
 class Dataset():
     def __init__(self, file: str, columns: list = ["id"]):
         self.file = file
-        self.columns = columns
-        self.data = pd.read_csv(self.file+ ".csv")
+
 
         if os.path.exists(self.file+".csv"):
             logger.debug(f"Loading data from {self.file}")
             self.data = pd.read_csv(self.file+".csv")
+            self.columns = self.data.columns.tolist()
         else:
+            self.columns = columns
             logger.info(f"File {self.file} does not exist. Initializing new DataFrame.")
             self.data = pd.DataFrame(columns=self.columns)
 
@@ -54,7 +55,10 @@ class Dataset():
 
             logger.debug(f"Saving dataset to {self.file}")
             if os.path.exists(self.tmp_file.name):
-                self.data = pd.read_csv(self.tmp_file.name)
+                try:
+                    self.data = pd.read_csv(self.tmp_file.name)
+                except:
+                    pass
                 self.tmp_file.close()
                 os.remove(self.tmp_file.name)
 
