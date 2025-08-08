@@ -1,14 +1,16 @@
 import argparse
 import logging
 from scrapers import UFCStatsScraper
+from datasets import Dataset
 from logging_config import setup_logging
 
-# Setup logging (logs to file + console)
-setup_logging()
 logger = logging.getLogger(__name__)
 
-# Entry point for script execution
-if __name__ == "__main__":
+def main(cli_args=None, log=True) -> int:
+
+    if log:
+        setup_logging(level=logging.DEBUG)
+
     logger.info("Starting FightIQ Scraper CLI")
 
     parser = argparse.ArgumentParser(
@@ -17,20 +19,30 @@ if __name__ == "__main__":
     )
 
     # Scraper arguments
-    parser.add_argument("-c", "--continuous", action="store_true", help="scrape even if previously scraped entries are present")
-    parser.add_argument("-w", "--wait", help="set maximum page load wait time", default=10)
-    parser.add_argument("-d", "--direct", action="store_true", help="save scraped data directly to final csv files rather than to a separate csv file")
-    parser.add_argument("-l", "--pre_linked", action="store_true", help="scrape data based off of links already scraped from the result csv file")
-    parser.add_argument("-u", "--update", action="store_true", help="update previously scraped data")
+    parser.add_argument(
+        "-i", "--ignore", action="store_true",
+        help="ignore any errors that occur during scraping"
+    )
+    parser.add_argument(
+        "-w", "--wait", default=10, type=int,
+        help="Set maximum page load wait time"
+    )
+    parser.add_argument(
+        "-d", "--direct", action="store_true",
+        help="Save scraped data directly to final CSV files rather than to a temp file"
+    )
+    parser.add_argument(
+        "-u", "--update", action="store_true",
+        help="Update previously scraped data"
+    )
 
-    args = parser.parse_args()
+    args = parser.parse_args(cli_args)
     logger.debug("Parsed CLI arguments: %s", args)
 
     scraper = UFCStatsScraper(
         wait_time=args.wait,
-        continuous=args.continuous,
+        ignore_errors=args.ignore,
         direct=args.direct,
-        pre_linked=args.pre_linked,
         update=args.update
     )
 
@@ -39,9 +51,19 @@ if __name__ == "__main__":
         logger.info("Running scraper...")
         scraper.run()
         logger.info("Scraper finished successfully.")
+        return 0
     except Exception as e:
-        logger.exception("An error occurred during scraping.")
+        logger.error("An error occurred during scraping: %s", e)
+        if args.ignore:
+            logger.warning("Ignoring errors due to --ignore flag.")
+        else:
+            logger.exception("Exiting due to an unhandled exception.")
         error = True
+        return 1
     finally:
         logger.info("Cleaning up and quitting scraper (error=%s)...", error)
         scraper.quit(error=error)
+
+if __name__ == "__main__":
+    exit_code = main()
+    exit(exit_code)
