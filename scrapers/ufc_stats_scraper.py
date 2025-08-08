@@ -1,223 +1,150 @@
+from cProfile import label
 import logging
-from bs4 import BeautifulSoup
 from .base import BaseScraper
+from exceptions import EntityExistsError
+from datasets import Dataset
 
 logger = logging.getLogger(__name__)
 
 class UFCStatsScraper(BaseScraper):
-    def __init__(self, wait_time: int, continuous: bool, direct: bool, pre_linked: bool, update: bool):
+    def __init__(self, wait_time: int, ignore_errors: bool, direct: bool, update: bool):
         super().__init__(
             base_url="http://www.ufcstats.com/",
             wait_time=wait_time,
-            continuous=continuous,
+            ignore_errors=ignore_errors,
             direct=direct,
-            pre_linked=pre_linked,
             update=update
         )
-
-    def get_event_listing_links(self, page: int) -> list[str] | None:
-        url = self.base_url + f"statistics/events/completed?page={page}"
-        logger.debug(f"Fetching event listing page {page}: {url}")
-        soup = self.fetch_soup(url)
-        if soup is None:
-            return None
-
-        rows = soup.select("tr.b-statistics__table-row")
-        links = []
-        for row in rows:
-            link_tag = row.select_one("a.b-link")
-            if link_tag and link_tag.get("href"):
-                links.append(link_tag["href"])
-        logger.info(f"Found {len(links)} events on page {page}")
-        return links
-
-    def get_event_details(self, link: str) -> dict | None:
-        logger.info(f"Scraping event details from {link}")
-        soup = self.fetch_soup(link)
-        if soup is None:
-            return None
-
-        event_id = link.split("/")[-1]
-
-        if self.current_events is not None and event_id in self.current_events["id"].values and not self.update:
-            logger.info(f"Event {event_id} already exists. Skipping.")
-            return None
-
-        try:
-            title_elem = soup.select_one("span.b-content__title-highlight")
-            date_elem = soup.select_one("li.b-list__box-list-item:nth-child(1)")
-            location_elem = soup.select_one("li.b-list__box-list-item:nth-child(2)")
-
-            event_title = title_elem.text.strip() if title_elem else ""
-            event_date = date_elem.text.replace("DATE:", "").strip() if date_elem else ""
-            event_location = location_elem.text.replace("LOCATION:", "").strip() if location_elem else ""
-        except Exception as e:
-            logger.error(f"Failed to parse basic event details from {link}: {e}")
-            return None
-
-        fight_rows = soup.select("tbody.b-fight-details__table-body tr.js-fight-details-click")
-        fight_links = [row.get("data-link") for row in fight_rows if row.get("data-link")]
-
-        fight_ids = []
-        for fight_link in fight_links:
-            logger.info(f"Processing fight link: {fight_link}")
-            if fight_link is not None:
-                fight_id = self.get_fight_details(str(fight_link), event_id)
-            else:
-                fight_id = None
-            if fight_id:
-                fight_ids.append(fight_id)
-            else:
-                logger.warning(f"Failed to scrape fight: {fight_link}")
-
-        logger.info(f"Scraped event {event_title} with {len(fight_ids)} fights")
-        return {
-            "id": event_id,
-            "title": event_title,
-            "date": event_date,
-            "location": event_location,
-            "fights": fight_ids
-        }
-
-    from bs4 import Tag
-
-    def get_fight_fighter_details(self, type: str, content: Tag) -> dict:
-        try:
-            name_elem = content.select_one("h3.b-fight-details__person-name a")
-            name = name_elem.text.strip() if name_elem else ""
-            nickname_elem = content.select_one("p.b-fight-details__person-title")
-            nickname = nickname_elem.text.strip().replace('"', "") if nickname_elem else ""
-            result_elem = content.select_one("i.b-fight-details__person-status")
-            result = result_elem.text.strip() if result_elem else "NO CONTEST"
-
-            result_map = {"W": "WIN", "L": "LOSS", "D": "DRAW"}
-            result = result_map.get(result, "NO CONTEST")
-
-            fighter_link_elem = content.select_one("h3.b-fight-details__person-name a")
-            fighter_link = fighter_link_elem.get("href") if fighter_link_elem else ""
-
-            return {
-                f"{type}_name": name,
-                f"{type}_nickname": nickname,
-                f"{type}_result": result,
-                f"{type}_link": fighter_link,
-            }
-        except Exception as e:
-            logger.warning(f"Failed to extract fighter ({type}) details: {e}")
-            return {
-                f"{type}_name": "",
-                f"{type}_nickname": "",
-                f"{type}_result": "NO CONTEST",
-                f"{type}_link": ""
-            }
-
-    def get_fight_details(self, link: str, event_id: str) -> str | None:
-        fight_id = link.split("/")[-1]
-        logger.debug(f"Scraping fight {fight_id} from {link}")
-        soup = self.fetch_soup(link)
-        if soup is None:
-            return None
-
-        fighters = soup.select(".b-fight-details__person")
-        fighters_details = {}
-        for index, fighter in enumerate(fighters):
-            fighter_type = "red" if index == 0 else "blue"
-            details = self.get_fight_fighter_details(fighter_type, fighter)
-            fighters_details.update(details)
-
-        bout_elem = soup.select_one(".b-fight-details__fight-title")
-        bout_type = bout_elem.text.replace("BOUT", "").strip() if bout_elem else ""
-
-        method_elem = soup.select_one(".b-fight-details__text-item_first")
-        method = method_elem.text.strip() if method_elem else ""
-        if method == "Other":
-            method = "DRAW"
-
-        info_items = soup.select(".b-fight-details__text-item")
-        round_, fight_time, total_rounds, total_time = "", "", "", ""
-
-        for item in info_items[:3]:
-            label_elem = item.select_one(".b-fight-details__label")
-            if not label_elem:
-                continue
-            label = label_elem.text.strip()
-            text = item.text.replace(label, "").strip()
-
-            if label == "ROUND:":
-                round_ = text
-            elif label == "TIME:":
-                fight_time = text
-            elif label == "TIME FORMAT:":
-                if text == "No Time Limit":
-                    total_rounds = "1"
-                    total_time = "No Time Limit"
-                elif text.startswith("1 Rnd +"):
-                    total_rounds = "1"
-                    total_time = "OT"
-                else:
-                    try:
-                        format_parts = text.split(" ")
-                        total_rounds = format_parts[0]
-                        time_per_round = format_parts[-1].replace("(", "").replace(")", "")
-                        minutes, seconds = map(int, time_per_round.split("-"))
-                        total_time = str(int(total_rounds) * (minutes * 60 + seconds))
-                    except Exception as e:
-                        logger.warning(f"Could not parse time format: {text} — {e}")
-                        total_time = ""
-
-        fight_details = {
-            "fight_id": fight_id,
-            "event_id": event_id,
-            "link": link,
-            "weight": bout_type,
-            "method": method,
-            "round": round_,
-            "time": fight_time,
-            "total_rounds": total_rounds,
-            "total_time": total_time
-        }
-
-        self.new_fights.append(fight_details | fighters_details)
-        logger.info(f"Scraped fight {fight_id} for event {event_id}")
-        return fight_id
-
-    def scrape_links(self, links: list) -> bool:
-        for link in links:
-            logger.info(f"Processing event link: {link}")
-            details = self.get_event_details(link)
-            if details:
-                self.new_events.append(details)
-            elif not self.continuous:
-                logger.warning("Encountered failure and not in continuous mode — stopping.")
-                return False
-        return True
+        self.events_dataset = Dataset("Events",["id", "title", "date", "location", "fights"])
+        self.fights_dataset = Dataset("Fights",["id", "event_id", "link", "weight", "method", "round", "time",
+                                                    "red_name", "red_nickname", "red_result",
+                                                    "blue_name", "blue_nickname", "blue_result"])
 
     def run(self):
         logger.info("UFCStatsScraper started.")
-        if self.pre_linked:
-            if self.current_events is None:
-                logger.warning("No current events loaded — cannot proceed with pre_linked.")
-                return
+        page = 1
+        while True:
+            url = self.base_url + f"statistics/events/completed?page={page}"
+            logger.debug(f"Fetching event listing page {page}: {url}")
+            
+            try:
+                soup = self.fetch_soup(url)
+                link_tags = self.parse_elements(soup, "tr.b-statistics__table-row a.b-link")
 
-            links = list(self.current_events["link"])
-            self.scrape_links(links)
-        else:
-            running = True
-            page = 1
-            while running:
-                try:
-                    logger.debug(f"Scraping event page {page}")
-                    links = self.get_event_listing_links(page)
-                    if links:
-                        running = self.scrape_links(links)
+                links = [self.parse_Tag_attribute(link_tag, "href") for link_tag in link_tags]
+
+                for link in links:
+                    event_id = self.parse_id_from_url(link)
+
+                    if self.events_dataset.does_id_exist(event_id) and not self.update:
+                        raise EntityExistsError("Event", event_id)
+                    
+                    soup = self.fetch_soup(link)
+                    
+                    title = self.clean_text(self.parse_text(self.parse_element(soup,"h2.b-content__title")))
+                    date = self.clean_text(self.parse_text(self.parse_element(soup,"li.b-list__box-list-item:nth-child(1)")).replace("Date:", ""))
+                    location = self.clean_text(self.parse_text(self.parse_element(soup,"li.b-list__box-list-item:nth-child(2)")).replace("Location:", ""))
+
+                    fight_rows = self.parse_elements(soup, "tbody.b-fight-details__table-body tr.js-fight-details-click")
+                    fight_links = [self.parse_Tag_attribute(row, "data-link") for row in fight_rows]
+
+                    fight_ids = [self.parse_id_from_url(fight_link) for fight_link in fight_links]
+
+
+                    if self.update:
+                        self.events_dataset.update_row(event_id, {
+                            "id": event_id,
+                            "title": title,
+                            "date": date,
+                            "location": location,
+                            "fights": fight_ids
+                        })
                     else:
-                        logger.info("No more links found — stopping.")
-                        running = False
-                except Exception as e:
-                    logger.exception(f"Unexpected error on page {page}: {e}")
-                    raise e
+                        self.events_dataset.add_row({
+                            "id": event_id,
+                            "title": title,
+                            "date": date,
+                            "location": location,
+                            "fights": fight_ids
+                        })
+                    self.events_dataset.save(direct=self.direct)
 
-                if running:
+                    for fight_id, fight_link in zip(fight_ids,fight_links):
+                        
+                        if self.fights_dataset.does_id_exist(fight_id) and not self.update:
+                            raise EntityExistsError("Fight", fight_id)
+                        
+                        soup = self.fetch_soup(fight_link)
+                        fighters = soup.select(".b-fight-details__person")
+
+                        weight = self.clean_text(self.parse_text(self.parse_element(soup, ".b-fight-details__fight-title")).replace("Bout",""))
+                        method = self.clean_text(self.parse_text(self.parse_element(soup, ".b-fight-details__text-item_first")).replace("Method:",""))
+                        method = "DRAW" if method == "Other" else method
+
+                        fight_details = {
+                            "id": fight_id,
+                            "event_id": event_id,
+                            "weight": weight,
+                            "method": method
+                        }
+
+                        fighter_details = {}
+                        for index, fighter in enumerate(fighters):
+                            fighter_type = "red" if index == 0 else "blue"
+                            name = self.clean_text(self.parse_text(self.parse_element(fighter, "h3.b-fight-details__person-name a")))
+                            nickname = self.clean_text(self.parse_text(self.parse_element(fighter,"p.b-fight-details__person-title")))
+                            result = self.clean_text(self.parse_text(self.parse_element(fighter,"i.b-fight-details__person-status")))
+
+                            fighter_details = fighter_details | {
+                                f"{fighter_type}_name": name,
+                                f"{fighter_type}_nickname": nickname,
+                                f"{fighter_type}_result": result
+                            }
+
+                        fight_details = fight_details | fighter_details
+                        
+                        info_items = self.parse_elements(soup,".b-fight-details__text-item")
+                        round_, fight_time = "", ""
+
+                        for item in info_items[:3]:
+                            label = self.clean_text(self.parse_text(self.parse_element(item,".b-fight-details__label")))
+
+                            text = self.clean_text(self.parse_text(item).replace(label, ""))
+                            if label == "Round:":
+                                round_ = text
+                            elif label == "Time:":
+                                fight_time = text
+
+                        fight_details = fight_details | {
+                            "round": round_,
+                            "time": fight_time
+                        }
+                        
+                        if self.update:
+                            self.fights_dataset.update_row(fight_id, fight_details)
+                        else:
+                            self.fights_dataset.add_row(fight_details)
+
+                        self.fights_dataset.save(direct=self.direct)
+                        
+            except EntityExistsError as e:
+                logger.warning(f"Entity already exists: {e}")
+                break
+            except Exception as e:
+                if self.ignore_errors:
+                    logger.error(f"Error on page {page}: {e}")
                     page += 1
-                self.save(self.direct)
-        logger.info("UFCStatsScraper finished.")
+                    continue
+                else:
+                    logger.exception("An error occurred during scraping.")
+                    raise e
+    def quit(self, error: bool):
+        """Handle cleanup and saving on exit."""
+        if error:
+            logger.warning("Exiting with errors — saving to temp files")
+            self.events_dataset.save(direct=False)
+            self.fights_dataset.save(direct=False)
+        else:
+            logger.info("Exiting without errors — saving to final files")
+            self.events_dataset.save(direct=True)
+            self.fights_dataset.save(direct=True)
