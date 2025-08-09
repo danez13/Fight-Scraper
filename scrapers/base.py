@@ -1,14 +1,15 @@
 import os
 import logging
-from abc import ABC, abstractmethod
+from exceptions import EntityExistsError
 import requests
 from bs4 import BeautifulSoup, Tag
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
+from collections.abc import Callable
 
 logger = logging.getLogger(__name__)
 
-class BaseScraper(ABC):
+class BaseScraper():
     def __init__(
         self,
         base_url: str,
@@ -26,6 +27,12 @@ class BaseScraper(ABC):
         self.update = update
         self.events_file = events_file
         self.fights_file = fights_file
+
+        self.url_paths = {
+            "events listing": "statistics/events/completed?page=",
+            "events": "event-details/",
+            "fights": "fight-details/"
+        }
 
         self.session = requests.Session()
         self.headers = {
@@ -109,7 +116,26 @@ class BaseScraper(ABC):
         logger.warning(f"Could not extract ID from URL: {url}")
         raise ValueError(f"Could not extract ID from URL: {url}")
     
-    @abstractmethod
-    def run(self):
-        raise NotImplementedError("Subclasses must implement the run method.")
+    def run(self, func:Callable):
+        logger.info("scraper started.")
+        page = 1
+        running = True
+        while running:
+            try:
+                running = func(page)
+
+            except EntityExistsError as e:
+                logger.warning(f"Entity already exists: {e}")
+                break
+            except Exception as e:
+                if self.ignore_errors:
+                    logger.error(f"Error on page {page}: {e}")
+                    page += 1
+                    continue
+                else:
+                    logger.exception("An error occurred during scraping.")
+                    raise e
+
+            page += 1
+        logger.info("scraper finished.")
 

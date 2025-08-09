@@ -26,8 +26,22 @@ class Dataset:
             mode='w+',
             suffix='.csv',
             prefix=f'{self.file}_progress_',
+            dir="./",
             delete=False
         )
+
+    def get_column(self, from_buffer:bool=True, column:str="id") -> list[str]:
+        target_df = self.buffer if from_buffer else self.data
+        if column not in target_df.columns:
+            raise ValueError(f"Dataset does not contain {column} column.")
+        
+        return target_df[column].tolist()
+    
+    def get_instance_column(self,id:str, column:str, from_buffer:bool=True, ):
+        target_df = self.buffer if from_buffer else self.data
+        if column not in target_df.columns:
+            raise ValueError(f"Dataset does not contain {column} column.")
+        return target_df.loc[target_df["id"] == id, column].tolist()[0]
 
     def does_id_exist(self, id: str, to_buffer: bool = True) -> bool:
         """
@@ -94,6 +108,7 @@ class Dataset:
             logger.debug(f"Saving dataset to final file {self.file}.csv")
             self.data.to_csv(self.file + ".csv", index=False)
             if os.path.exists(self.tmp_file.name):
+                self.tmp_file.close()
                 os.remove(self.tmp_file.name)
         else:
             logger.debug(f"Saving dataset to temporary file {self.tmp_file.name}")
