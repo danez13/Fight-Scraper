@@ -11,8 +11,9 @@ class Dataset:
 
         if os.path.exists(self.file + ".csv"):
             logger.debug(f"Loading data from {self.file}")
-            self.data = pd.read_csv(self.file + ".csv")
+            self.data = pd.read_csv(self.file + ".csv", dtype={"id": str})
             self.columns = self.data.columns.tolist()
+            
         else:
             self.columns = columns
             logger.info(f"File {self.file} does not exist. Initializing new DataFrame.")
