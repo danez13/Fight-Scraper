@@ -108,10 +108,10 @@ class BaseScraper():
         """Extract an ID from a URL assuming the ID is the last segment."""
         if url:
             parts = url.rstrip('/').split('/')
-            if parts:
-                return parts[-1]
-            else:
+            if len(parts) <= 3:  # scheme + domain only, no path
                 raise ValueError(f"Could not extract ID from URL: {url}")
+            return parts[-1]
+        raise ValueError(f"Could not extract ID from URL: {url}")
         
         logger.warning(f"Could not extract ID from URL: {url}")
         raise ValueError(f"Could not extract ID from URL: {url}")
