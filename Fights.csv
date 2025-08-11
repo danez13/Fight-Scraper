@@ -1,4 +1,16 @@
 id,event_id,weight,method,round,time,red_name,red_nickname,red_result,blue_name,blue_nickname,blue_result
+68fe62bac7fd8bb0,6cd3dfc54f01287f,Middleweight,Submission,4,2:45,Roman Dolidze,,L,Anthony Hernandez,Fluffy,W
+37d58369782cb86b,6cd3dfc54f01287f,Bantamweight,Decision - Unanimous,3,5:00,Steve Erceg,Astroboy,W,Ode Osbourne,The Jamaican Sensation,L
+646c79a7ecd12e5f,6cd3dfc54f01287f,Women's Strawweight,Decision - Unanimous,3,5:00,Iasmin Lucindo,,W,Angela Hill,Overkill,L
+98d6771af9b0ebe5,6cd3dfc54f01287f,Featherweight,Decision - Split,3,5:00,Andre Fili,Touchy,W,Christian Rodriguez,Ceerod,L
+ed5383b50ffcdded,6cd3dfc54f01287f,Bantamweight,Decision - Split,3,5:00,Miles Johns,Chapo,L,Jean Matsumoto,,W
+75a84211f50c53f5,6cd3dfc54f01287f,Middleweight,KO/TKO,1,3:53,Eryk Anders,Ya Boi,L,Christian Leroy Duncan,CLD,W
+3d6571790c21527c,6cd3dfc54f01287f,Light Heavyweight,Decision - Unanimous,3,5:00,Julius Walker,Juice Box,W,Rafael Cerqueira,The Lion,L
+ae7a8f19743e8154,6cd3dfc54f01287f,Bantamweight,KO/TKO,1,4:10,Elijah Smith,Swift,W,Toshiomi Kazama,,L
+aef44145740741b3,6cd3dfc54f01287f,Women's Bantamweight,KO/TKO,1,2:24,Joselyne Edwards,La Pantera,W,Priscila Cachoeira,Zombie Girl,L
+7d923267c44dd93b,6cd3dfc54f01287f,Welterweight,KO/TKO,1,1:03,Uros Medic,The Doctor,W,Gilbert Urbina,The RGV Bad Boy,L
+6ef50ed03b116b60,6cd3dfc54f01287f,Women's Flyweight,Decision - Unanimous,3,5:00,Gabriella Fernandes,Gabi,W,Julija Stoliarenko,,L
+857e8facd8ff7c36,6cd3dfc54f01287f,Light Heavyweight,Decision - Split,3,5:00,Cody Brundage,,L,Eric McConico,,W
 282c8c6c1ed82bfb,f2c934689243fe4e,Flyweight,Submission,2,1:06,Tatsuro Taira,,W,HyunSung Park,Peace of Mind,L
 426a69e343822ab3,f2c934689243fe4e,Lightweight,Decision - Unanimous,3,5:00,Mateusz Rebecki,,L,Chris Duncan,The Problem,W
 878941394f9e3538,f2c934689243fe4e,Lightweight,Decision - Unanimous,3,5:00,Elves Brener,,L,Esteban Ribovics,El Gringo,W
@@ -8295,15 +8307,3 @@ ac7ca2ec38b96c1a,6420efac0578988b,Open Weight,KO/TKO,1,0:59,Gerard Gordeau,,W,Ke
 cecdc0da584274b9,6420efac0578988b,Open Weight,Submission,1,2:18,Royce Gracie,,W,Art Jimmerson,,L
 2d2bbc86e941e05c,6420efac0578988b,Open Weight,KO/TKO,1,4:20,Kevin Rosier,,W,Zane Frazier,Nasty,L
 567a09fd200cfa05,6420efac0578988b,Open Weight,KO/TKO,1,0:26,Gerard Gordeau,,W,Teila Tuli,,L
-68fe62bac7fd8bb0,6cd3dfc54f01287f,Middleweight,Submission,4,2:45,Roman Dolidze,,L,Anthony Hernandez,Fluffy,W
-37d58369782cb86b,6cd3dfc54f01287f,Bantamweight,Decision - Unanimous,3,5:00,Steve Erceg,Astroboy,W,Ode Osbourne,The Jamaican Sensation,L
-646c79a7ecd12e5f,6cd3dfc54f01287f,Women's Strawweight,Decision - Unanimous,3,5:00,Iasmin Lucindo,,W,Angela Hill,Overkill,L
-98d6771af9b0ebe5,6cd3dfc54f01287f,Featherweight,Decision - Split,3,5:00,Andre Fili,Touchy,W,Christian Rodriguez,Ceerod,L
-ed5383b50ffcdded,6cd3dfc54f01287f,Bantamweight,Decision - Split,3,5:00,Miles Johns,Chapo,L,Jean Matsumoto,,W
-75a84211f50c53f5,6cd3dfc54f01287f,Middleweight,KO/TKO,1,3:53,Eryk Anders,Ya Boi,L,Christian Leroy Duncan,CLD,W
-3d6571790c21527c,6cd3dfc54f01287f,Light Heavyweight,Decision - Unanimous,3,5:00,Julius Walker,Juice Box,W,Rafael Cerqueira,The Lion,L
-ae7a8f19743e8154,6cd3dfc54f01287f,Bantamweight,KO/TKO,1,4:10,Elijah Smith,Swift,W,Toshiomi Kazama,,L
-aef44145740741b3,6cd3dfc54f01287f,Women's Bantamweight,KO/TKO,1,2:24,Joselyne Edwards,La Pantera,W,Priscila Cachoeira,Zombie Girl,L
-7d923267c44dd93b,6cd3dfc54f01287f,Welterweight,KO/TKO,1,1:03,Uros Medic,The Doctor,W,Gilbert Urbina,The RGV Bad Boy,L
-6ef50ed03b116b60,6cd3dfc54f01287f,Women's Flyweight,Decision - Unanimous,3,5:00,Gabriella Fernandes,Gabi,W,Julija Stoliarenko,,L
-857e8facd8ff7c36,6cd3dfc54f01287f,Light Heavyweight,Decision - Split,3,5:00,Cody Brundage,,L,Eric McConico,,W
