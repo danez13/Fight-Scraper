@@ -168,6 +168,8 @@ class UFCStatsScraper(BaseScraper):
                 return False
         return True
 
+<<<<<<< HEAD
+=======
                     if self.events_dataset.does_id_exist(event_id) and not self.update:
                         raise EntityExistsError("Event", event_id)
                     
@@ -270,6 +272,10 @@ class UFCStatsScraper(BaseScraper):
                 else:
                     logger.exception("An error occurred during scraping.")
                     raise e
+<<<<<<< HEAD
+=======
+>>>>>>> parent of a5be162 (Refactor Dataset and UFCStatsScraper: Improve column handling and clean text method)
+>>>>>>> 8bbcb12da2605fa11e0343712594c0dfe4ae9208
     def quit(self, error: bool):
         """Handle cleanup and saving on exit."""
         if error:
