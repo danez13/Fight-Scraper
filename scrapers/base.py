@@ -95,11 +95,9 @@ class BaseScraper():
         raise ValueError(f"No text found in element: {element}")
 
     def clean_text(self, text: str) -> str:
-        """Clean and normalize text, removing excessive whitespace and surrounding quotes."""
+        """Clean and normalize text."""
         if text:
-            cleaned = ' '.join(text.split()).strip()
-            # Remove surrounding single or double quotes (including triple quotes)
-            return cleaned.strip('"').strip("'")
+            return ' '.join(text.split()).strip()
         
         logger.warning("Empty or None text provided for cleaning")
         return ""
