@@ -16,7 +16,7 @@ class UFCStatsScraper(BaseScraper):
             update=update
         )
         self.events_dataset = Dataset("Events",["id", "title", "date", "location", "fights"])
-        self.fights_dataset = Dataset("Fights",["id", "event_id", "weight", "method", "round", "time",
+        self.fights_dataset = Dataset("Fights",["id", "event_id", "title", "method", "round", "time",
                                                     "red_name", "red_nickname", "red_result",
                                                     "blue_name", "blue_nickname", "blue_result"])
 

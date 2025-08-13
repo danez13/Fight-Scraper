@@ -1,4 +1,4 @@
-id,event_id,weight,method,round,time,red_name,red_nickname,red_result,blue_name,blue_nickname,blue_result
+id,event_id,title,method,round,time,red_name,red_nickname,red_result,blue_name,blue_nickname,blue_result
 68fe62bac7fd8bb0,6cd3dfc54f01287f,Middleweight,Submission,4,2:45,Roman Dolidze,,L,Anthony Hernandez,Fluffy,W
 37d58369782cb86b,6cd3dfc54f01287f,Bantamweight,Decision - Unanimous,3,5:00,Steve Erceg,Astroboy,W,Ode Osbourne,The Jamaican Sensation,L
 646c79a7ecd12e5f,6cd3dfc54f01287f,Women's Strawweight,Decision - Unanimous,3,5:00,Iasmin Lucindo,,W,Angela Hill,Overkill,L
