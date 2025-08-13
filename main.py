@@ -35,17 +35,9 @@ def main(cli_args=None, log=True) -> int:
         "-u", "--update", action="store_true",
         help="Update previously scraped data"
     )
-    parser.add_argument(
-        "-s", "--scrape",
-        choices=["events", "fights", "all"],  # three valid options
-        default="all",                     # default if not provided
-        help="What to scrape: 'events', 'fights', or 'all' (default: events)"
-    )
 
     args = parser.parse_args(cli_args)
     logger.debug("Parsed CLI arguments: %s", args)
-
-    
 
     scraper = UFCStatsScraper(
         wait_time=args.wait,
@@ -54,20 +46,10 @@ def main(cli_args=None, log=True) -> int:
         update=args.update
     )
 
-    if args.scrape == "events":
-        func = scraper.scrape_events
-    elif args.scrape == "fights":
-        func = scraper.scrape_fights
-    else:
-        func = scraper.scrape_all
-
     error = False
     try:
         logger.info("Running scraper...")
-        logger.info(args.scrape)
-
-        scraper.run(func)
-
+        scraper.run()
         logger.info("Scraper finished successfully.")
         return 0
     except Exception as e:

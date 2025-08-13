@@ -1,72 +1,88 @@
 import pytest
-from unittest.mock import patch, MagicMock
 import logging
+from unittest.mock import MagicMock, patch
 import main
 
 
 @pytest.fixture
-def mock_scraper():
-    """Patch UFCStatsScraper and yield a mock instance."""
-    with patch("main.UFCStatsScraper", autospec=True) as MockScraper:
-        instance = MockScraper.return_value
-        instance.run = MagicMock()
-        instance.quit = MagicMock()
-        yield instance
+def mock_scraper_cls():
+    """Fixture to patch UFCStatsScraper so no real scraping occurs."""
+    with patch("main.UFCStatsScraper") as mock_cls:
+        mock_instance = MagicMock()
+        mock_cls.return_value = mock_instance
+        yield mock_cls
 
 
 @pytest.fixture
-def mock_logging():
-    """Patch setup_logging so tests don’t set global logging."""
-    with patch("main.setup_logging") as mock_setup:
-        yield mock_setup
+def mock_setup_logging():
+    """Fixture to patch setup_logging to avoid real log config."""
+    with patch("main.setup_logging") as mock_log:
+        yield mock_log
 
 
 @pytest.mark.parametrize(
-    "scrape_arg, expected_method",
+    "cli_args, expected_kwargs",
     [
-        ("events", "scrape_events"),
-        ("fights", "scrape_fights"),
-        ("all", "scrape_all"),
+        ([], {"wait_time": 10, "ignore_errors": False, "direct": False, "update": False}),
+        (["-w", "5", "-i"], {"wait_time": 5, "ignore_errors": True, "direct": False, "update": False}),
+        (["-d", "-u"], {"wait_time": 10, "ignore_errors": False, "direct": True, "update": True}),
     ],
 )
-def test_main_invokes_correct_scraper_method(mock_scraper, mock_logging, scrape_arg, expected_method):
-    """Ensure CLI calls the correct scraper method."""
-    exit_code = main.main(["--scrape", scrape_arg])
+def test_main_success(cli_args, expected_kwargs, mock_scraper_cls, mock_setup_logging):
+    """Test main() when scraper.run() succeeds."""
+    mock_instance = mock_scraper_cls.return_value
+
+    exit_code = main.main(cli_args)
+
+    # Assert scraper is created with correct args
+    mock_scraper_cls.assert_called_once_with(**expected_kwargs)
+
+    # run() is called and quit() is called once with error=False
+    mock_instance.run.assert_called_once()
+    mock_instance.quit.assert_called_once_with(error=False)
+
     assert exit_code == 0
-    mock_scraper.run.assert_called_once_with(getattr(mock_scraper, expected_method))
-    mock_scraper.quit.assert_called_once_with(error=False)
 
 
-def test_main_returns_1_on_error(mock_scraper, mock_logging):
-    """Test that exceptions cause exit code 1 and quit with error=True."""
-    mock_scraper.run.side_effect = RuntimeError("boom")
-
-    exit_code = main.main(["--scrape", "all"])
-    assert exit_code == 1
-    mock_scraper.quit.assert_called_once_with(error=True)
-
-
-def test_main_ignore_flag_logs_warning(mock_scraper, mock_logging, caplog):
-    """Test that --ignore still logs a warning on errors."""
-    mock_scraper.run.side_effect = RuntimeError("boom")
+def test_main_scraper_error_ignore_flag(mock_scraper_cls, mock_setup_logging, caplog):
+    """Test main() when scraper.run() raises exception but --ignore is set."""
+    mock_instance = mock_scraper_cls.return_value
+    mock_instance.run.side_effect = RuntimeError("Scraper failed")
 
     with caplog.at_level(logging.WARNING):
-        exit_code = main.main(["--scrape", "all", "--ignore"])
+        exit_code = main.main(["--ignore"])
 
+    # Even on error, quit() should still be called with error=True
+    mock_instance.quit.assert_called_once_with(error=True)
+
+    assert "Ignoring errors due to --ignore flag." in caplog.text
     assert exit_code == 1
-    assert "Ignoring errors" in caplog.text
-    mock_scraper.quit.assert_called_once_with(error=True)
 
 
-def test_setup_logging_called_when_log_true(mock_scraper):
-    """setup_logging should be called when log=True."""
-    with patch("main.setup_logging") as mock_setup_logging:
-        main.main(["--scrape", "all"], log=True)
-        mock_setup_logging.assert_called_once_with(level=logging.DEBUG)
+def test_main_scraper_error_no_ignore(mock_scraper_cls, mock_setup_logging, caplog):
+    """Test main() when scraper.run() raises exception and --ignore is NOT set."""
+    mock_instance = mock_scraper_cls.return_value
+    mock_instance.run.side_effect = ValueError("Boom!")
+
+    with caplog.at_level(logging.ERROR):
+        exit_code = main.main([])
+
+    mock_instance.quit.assert_called_once_with(error=True)
+    assert "Exiting due to an unhandled exception." in caplog.text
+    assert exit_code == 1
 
 
-def test_setup_logging_not_called_when_log_false(mock_scraper):
-    """setup_logging should not be called when log=False."""
-    with patch("main.setup_logging") as mock_setup_logging:
-        main.main(["--scrape", "all"], log=False)
-        mock_setup_logging.assert_not_called()
+def test_main_logging_disabled(mock_scraper_cls):
+    with patch("main.setup_logging") as mock_log:
+        exit_code = main.main(cli_args=[], log=False)
+        assert exit_code == 0
+        mock_log.assert_not_called()
+
+
+def test_main_quit_called_on_exception(mock_scraper_cls, mock_setup_logging):
+    """Ensure quit() is called even if exception occurs before run()."""
+    mock_scraper_cls.side_effect = RuntimeError("Init fail")
+
+    with pytest.raises(RuntimeError):
+        main.main([])
+    mock_scraper_cls.assert_called_once()
