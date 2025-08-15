@@ -1,4 +1,3 @@
-from cProfile import label
 import logging
 from .base import BaseScraper
 from exceptions import EntityExistsError
