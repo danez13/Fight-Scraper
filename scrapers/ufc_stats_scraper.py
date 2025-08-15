@@ -23,7 +23,8 @@ class UFCStatsScraper(BaseScraper):
     def run(self):
         logger.info("UFCStatsScraper started.")
         page = 1
-        while True:
+        running = True
+        while running:
             url = self.base_url + f"statistics/events/completed?page={page}"
             logger.debug(f"Fetching event listing page {page}: {url}")
             
@@ -77,14 +78,14 @@ class UFCStatsScraper(BaseScraper):
                         soup = self.fetch_soup(fight_link)
                         fighters = soup.select(".b-fight-details__person")
 
-                        weight = self.clean_text(self.parse_text(self.parse_element(soup, ".b-fight-details__fight-title")).replace("Bout",""))
+                        fight_title = self.clean_text(self.parse_text(self.parse_element(soup, ".b-fight-details__fight-title")))
                         method = self.clean_text(self.parse_text(self.parse_element(soup, ".b-fight-details__text-item_first")).replace("Method:",""))
                         method = "DRAW" if method == "Other" else method
 
                         fight_details = {
                             "id": fight_id,
                             "event_id": event_id,
-                            "weight": weight,
+                            "title": fight_title,
                             "method": method
                         }
 
@@ -126,6 +127,9 @@ class UFCStatsScraper(BaseScraper):
                             self.fights_dataset.add_row(fight_details)
 
                         self.fights_dataset.save(direct=self.direct)
+                    if event_id == "6420efac0578988b":
+                        running = False
+                        break
                         
             except EntityExistsError as e:
                 logger.warning(f"Entity already exists: {e}")

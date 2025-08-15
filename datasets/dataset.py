@@ -21,6 +21,7 @@ class Dataset():
                 mode='w+', 
                 suffix='.csv', 
                 prefix=f'{self.file}_progress_', 
+                dir="",
                 delete=False
             )
 
