@@ -1,10 +1,13 @@
 import os
 import logging
-from abc import ABC, abstractmethod
+from abc import ABC
+from typing import Callable
 import requests
 from bs4 import BeautifulSoup, Tag
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
+
+from exceptions import EntityExistsError
 
 logger = logging.getLogger(__name__)
 
@@ -14,16 +17,12 @@ class BaseScraper(ABC):
         base_url: str,
         wait_time: int,
         ignore_errors: bool,
-        direct: bool,
-        update: bool,
         events_file: str = "Events.csv",
         fights_file: str = "Fights.csv"
     ):
         self.base_url = base_url
         self.wait_time = wait_time
         self.ignore_errors = ignore_errors
-        self.direct = direct
-        self.update = update
         self.events_file = events_file
         self.fights_file = fights_file
 
@@ -109,6 +108,16 @@ class BaseScraper(ABC):
         logger.warning(f"Could not extract ID from URL: {url}")
         raise ValueError(f"Could not extract ID from URL: {url}")
     
-    @abstractmethod
-    def run(self):
-        raise NotImplementedError("Subclasses must implement the run method.")
+    def run(self,func:Callable,parameters:dict) -> list: # type: ignore
+        results = []
+        try:
+            result = func(**parameters)
+            if not isinstance(result,list):
+                raise ValueError("Improper scrape results")
+            else: return result
+        except EntityExistsError as e:
+            logger.warning(f"Ignored existing entity: {e}")
+            return results
+        except Exception as e:
+            logger.exception("An error occurred during scraping.")
+            raise e

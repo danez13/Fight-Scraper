@@ -4,8 +4,9 @@ import logging
 import tempfile
 logger = logging.getLogger(__name__)
 class Dataset():
-    def __init__(self, file: str, columns: list = ["id"]):
+    def __init__(self, file: str, update:bool, columns: list = ["id"]):
         self.file = file
+        self.update = update
 
 
         if os.path.exists(self.file+".csv"):
@@ -24,19 +25,40 @@ class Dataset():
                 dir="",
                 delete=False
             )
+        
+    def __getitem__(self,key:str):
+        return self.data[key]
 
     def does_id_exist(self, id: str) -> bool:
         """Check if an ID exists in the dataset."""
         if 'id' not in self.data.columns:
             raise ValueError("Dataset does not contain 'id' column.")
+                
+        if self.update:
+            return False
         return id in self.data['id'].values
     
-    def add_row(self, row:dict):
+    def add_row(self, row:dict,prepend:bool=False):
         """Add a new row to the dataset."""
         if not isinstance(row, dict):
             raise ValueError("Row must be a dictionary.")
         
-        self.data = pd.concat([self.data, pd.DataFrame([row])], ignore_index=True)
+        new_data = pd.DataFrame([row])
+
+        if self.data.empty:
+            self.data = new_data
+        elif prepend:
+            self.data = pd.concat([new_data, self.data], ignore_index=True)
+        else:
+            self.data = pd.concat([self.data, new_data], ignore_index=True)
+
+    def add_rows(self,rows:list[dict],prepend:bool=False):
+        if not isinstance(rows,list):
+            raise ValueError("Rows must be a list")
+        
+        for row in rows:
+            self.add_row(row,prepend=prepend)
+
 
     def update_row(self, id: str, row: dict):
         """Update an existing row in the dataset."""
@@ -46,9 +68,22 @@ class Dataset():
         if id not in self.data['id'].values:
             raise ValueError(f"ID {id} does not exist in the dataset.")
         
+        # Ensure only valid columns are updated
+        invalid_keys = set(row.keys()) - set(self.data.columns)
+        if invalid_keys:
+            raise ValueError(f"Invalid column(s): {invalid_keys}")
+        
         self.data.loc[self.data['id'] == id, list(row.keys())] = list(row.values())
-    
-    def save(self,direct:bool = False):
+
+
+
+    def update_rows(self, ids: list[str], rows: list[dict]):
+        """Update multiple rows in the dataset."""
+        for id, row in zip(ids, rows):
+            self.update_row(id, row)
+
+
+    def save(self,direct:bool):
         """Save the dataset to the CSV file."""
         if direct:
             if not self.file:
