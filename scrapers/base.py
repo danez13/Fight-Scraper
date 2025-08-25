@@ -6,6 +6,7 @@ import requests
 from bs4 import BeautifulSoup, Tag
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
+import re
 
 from exceptions import EntityExistsError
 
@@ -90,6 +91,7 @@ class BaseScraper(ABC):
         """Clean and normalize text, removing excessive whitespace and surrounding quotes."""
         if text:
             cleaned = ' '.join(text.split()).strip()
+            cleaned = re.sub(r"[()]", "", cleaned)
             # Remove surrounding single or double quotes (including triple quotes)
             return cleaned.strip('"').strip("'")
         

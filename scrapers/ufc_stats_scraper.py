@@ -1,4 +1,5 @@
 import logging
+from collections import OrderedDict
 from typing import Callable
 from .base import BaseScraper
 from exceptions import EntityExistsError
@@ -18,15 +19,92 @@ class UFCStatsScraper(BaseScraper):
             "event listing": "statistics/events/completed?page=",
             "events": "event-details/",
             "fights": "fight-details/",
+            "fighter listing": "statistics/fighters?",
+            "fighters": "fighter-details/"
         }
 
+    ############
+    # FIGHTERS #
+    ############
+
+    def scraper_fighter_listing(self,char:str,page:int):
+        url = self.base_url + self.site_paths["fighter listing"] + "char=" + char + "&page=" + str(page)
+        logger.debug(f"Fetching fighter listing character {char} page {page}: {url}")
+        soup = self.fetch_soup(url)
+        try:
+            link_tags = self.parse_elements(soup,"tr.b-statistics__table-row td.b-statistics__table-col a.b-link")
+            ids = list(OrderedDict.fromkeys([self.parse_id_from_url(self.parse_Tag_attribute(link_tag, "href")) for link_tag in link_tags]))
+        except:
+            # No events on this page → last page reached
+            logger.info(f"No fighter found on character {char} page {page}. Ending pagination.")
+            ids = []
+        return ids
+    
+    def scrape_fighter(self,id:str):
+        url = self.base_url + self.site_paths["fighters"] + id
+        soup = self.fetch_soup(url)
+        name = self.clean_text(self.parse_text(self.parse_element(soup,"h2.b-content__title span.b-content__title-highlight")))
+        record = self.clean_text(self.parse_text(self.parse_element(soup,"h2.b-content__title span.b-content__title-record")).replace("Record:",""))
+        win,loss,draw = record.split("-")
+        split = draw.split(" ",1)
+        
+        if len(split) == 2:
+            draw,nc = split
+            nc = self.clean_text(nc.replace(" NC",""))
+        else:
+            draw = draw
+            nc = "0"
+        bio_items = self.parse_elements(soup,"div.b-list__info-box ul.b-list__box-list li")
+
+        bio = {}
+        for item in bio_items:
+            label = self.parse_element(item,"i")
+            if label:
+                key = self.clean_text(self.parse_text(label).replace(":",""))
+                if key == "":
+                    continue
+                value = self.clean_text(self.parse_text(item).replace(self.clean_text(self.parse_text(label)),""))
+                bio[key.lower()] = value
+        try:
+            fight_rows = self.parse_elements(soup,"table.b-fight-details__table tbody tr.b-fight-details__table-row__hover")
+            fights = []
+            for row in fight_rows:
+                cols = self.parse_elements(row,"td")
+                result = self.clean_text(self.parse_text(cols[0]))
+                opponent = self.clean_text(self.parse_text(self.parse_elements(cols[1],"a")[1]))
+                fight_id = self.parse_id_from_url(self.parse_Tag_attribute(row,"data-link"))
+                fights.append({
+                    "id": fight_id,
+                    "result":result,
+                    "opponent":opponent,
+                    })
+        except:
+            fights = []
+
+        return {
+            "id":id,
+            "name":name,
+            "win":win,
+            "loss":loss,
+            "draw":draw,
+            "no contest": nc,
+            "fights":fights
+        } | bio
+    def scrape_fighters(self,ids,early_stopping:Callable):
+        data_collection = []
+        for id in ids:
+            if early_stopping(id):
+                return data_collection
+            data = self.scrape_fighter(id)
+            logger.info(data)
+            data_collection.append(data)
+        return data_collection
+    
     ##########
     # FIGHTS #
     ##########
 
-    def scrape_fight(self, id: str, event_id: str, early_stopping: Callable) -> dict|None:
-        if early_stopping(id):
-            return None
+    def scrape_fight(self, id: str, event_id: str) -> dict:
 
         url = self.base_url + self.site_paths["fights"] + id
         soup = self.fetch_soup(url)
@@ -88,9 +166,9 @@ class UFCStatsScraper(BaseScraper):
     def scrape_fights(self, ids: list[str], event_id: str, early_stopping: Callable) -> list:
         data_collection = []
         for id in ids:
-            data = self.scrape_fight(id,event_id,early_stopping)
-            if data is None:
+            if early_stopping(id):
                 return data_collection
+            data = self.scrape_fight(id,event_id)
             data_collection.append(data)
         return data_collection
 
@@ -113,10 +191,7 @@ class UFCStatsScraper(BaseScraper):
 
         return ids
 
-    def scrape_event(self, id: str, early_stopping: Callable) -> dict|None:
-        if early_stopping(id):
-            return 
-
+    def scrape_event(self, id: str) -> dict:
         url = self.base_url + self.site_paths["events"] + id
         soup = self.fetch_soup(url)
 
@@ -139,12 +214,12 @@ class UFCStatsScraper(BaseScraper):
             "location": location,
             "fights": fight_ids,
         }
-
+    
     def scrape_events(self, ids: list[str], early_stopping: Callable) -> list[dict]:
         data_collection = []
         for id in ids:
-            data = self.scrape_event(id, early_stopping)
-            if data is None:
+            if early_stopping(id):
                 return data_collection
+            data = self.scrape_event(id)
             data_collection.append(data)
         return data_collection
