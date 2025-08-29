@@ -3,7 +3,7 @@ import logging
 from typing import Callable
 from exceptions import EntityExistsError
 from scrapers import UFCStatsScraper
-from datasets import Dataset
+from datasets import Dataset, DataController
 from logging_config import setup_logging
 
 logger = logging.getLogger(__name__)
@@ -52,8 +52,9 @@ def fight_scraping(scraper: UFCStatsScraper, events: list[dict], early_stopping)
                 "early_stopping": early_stopping,
             },
         )
-        for fight in fights:
-            fight["event_id"] = event["id"]
+        for fight,weight in zip(fights,event["weights"]):
+            fight["event"] = event["id"]
+            fight["weight"] = weight
         data_collection.extend(fights)
     return data_collection
 
@@ -109,42 +110,43 @@ def main(cli_args=None, log=True) -> int:
     scraper = UFCStatsScraper(wait_time=args.wait, ignore_errors=args.ignore)
 
     # Initialize datasets
-    events_dataset = Dataset("events", args.update, disabled = True if args.no_events else False)
-    fights_dataset = Dataset("fights", args.update,disabled=True if args.no_fights else False)
-    fighters_dataset = Dataset("fighters", args.update,disabled=True if args.no_fighters else False)
-    fight_fighters_dataset = Dataset("fighter_fights",args.update,disabled=True if args.no_fighters and args.no_fights else False)
+    controller = DataController(["events","fights","fighters","fighter_fights"],args.update,args.direct)
 
-    if not args.no_fights or not args.no_events:
+    fights_scraping_initializer = []
+    if not args.no_events:
         page = 1
         while True:
-            # --- Scrape event listing page ---
             event_ids = attempt_func(event_listing_scraping,{"scraper":scraper,"page":page},args.ignore)
 
-            events_page_data = []
-            if not args.no_events:
-                # --- Scrape events for this page ---
-                events_page_data = attempt_func(event_scraping,{"scraper":scraper,"ids":event_ids,"early_stopping":events_dataset.does_id_exist},args.ignore)
-                events_dataset.add_rows(events_page_data,prepend=args.prepend)
-                if len(events_page_data) == 0:
-                    logger.info(f"No more events found after page {page}.")
-                    break
-                events_dataset.save(direct=args.direct)
-                logger.info(f"Scraped page {page} with {len(events_page_data)} events")
+            if len(event_ids) == 0:
+                logger.info(f"No more events found after page {page}.")
+                break
 
-            # --- Scrape fights for this page ---
-            if not args.no_fights:
-                if args.no_events:
-                    events_page_data = attempt_func(event_scraping,{"scraper":scraper,"ids":event_ids,"early_stopping": lambda x: False},args.ignore)
-                    # For fights-only mode, we need to get fights per event directly
-                fights_page_data = attempt_func(fight_scraping,{"scraper":scraper,"events":events_page_data,"early_stopping":fights_dataset.does_id_exist},args.ignore)
-                if len(fights_page_data) == 0:
-                    logger.info(f"No more fighters found.")
-                    break
-                fights_dataset.add_rows(fights_page_data,prepend=args.prepend)
-                fights_dataset.save(direct=args.direct)
-                logger.info(f"Scraped {len(fights_page_data)} fights from page {page}")
+            events_page_data = attempt_func(event_scraping,{"scraper":scraper,"ids":event_ids,"early_stopping":controller.get_early_stopping("events")},args.ignore)
+            controller.insert("events",events_page_data,args.prepend)
+            logger.info(f"Scraped page {page} with {len(events_page_data)} events")
+            page+=1
 
-            page += 1
+        fights_scraping_initializer = controller.select("events",["id","fights","weights"])
+        controller.drop("events",["fights","weights"])
+
+    if not args.no_fights:
+        if args.no_events:
+            page = 1
+            fights_scraping_initializer = []
+            while True:
+                event_ids = attempt_func(event_listing_scraping,{"scraper":scraper,"page":page},args.ignore)
+                event_data = attempt_func(event_scraping,{"scraper":scraper,"ids":event_ids,"early_stopping": lambda x: False},args.ignore)
+                fights_scraping_initializer.extend(event_data)
+                if len(event_ids) == 0:
+                    logger.info(f"No more fights found after page {page}.")
+                    break
+                page+=1
+        fights_page_data = attempt_func(fight_scraping,{"scraper":scraper,"events":fights_scraping_initializer,"early_stopping":controller.get_early_stopping("fights")},args.ignore)
+        
+        controller.insert("fights",fights_page_data,args.prepend)
+        
+        logger.info(f"Scraped {len(fights_page_data)} fights")
 
     if not args.no_fighters:
         char=97
@@ -152,24 +154,37 @@ def main(cli_args=None, log=True) -> int:
             page=1
             while True:
                 fighter_ids = attempt_func(fighter_listing_scraping, {"scraper":scraper,"char":chr(char),"page":page},args.ignore)
-                fighters_page_data = attempt_func(fighter_scraping,{"scraper":scraper,"ids":fighter_ids,"early_stopping":fighters_dataset.does_id_exist},args.ignore)
+                fighters_page_data = attempt_func(fighter_scraping,{"scraper":scraper,"ids":fighter_ids,"early_stopping":controller.get_early_stopping("fighters")},args.ignore)
+                
                 if len(fighters_page_data) == 0:
                     logger.info(f"No more fights found.")
                     break
-                fighters_dataset.add_rows(fighters_page_data,prepend=args.prepend)
-                fighters_dataset.save(direct=args.direct)
+                
+                controller.insert("fighters",fighters_page_data,args.prepend)
                 page+=1
+                break
             if char == 122:
                 break
             char+=1
+            break
+        
+        fighters_fights = controller.select("fighters","fights")
+        controller.drop("fighters","fights")
+        fighters_fights_data = []
+        for fighter_fights in fighters_fights:
+            fighters_fights_data.extend(fighter_fights["fights"])
+        controller.insert("fighter_fights",fighters_fights_data,args.prepend)
 
     # --- Final save to proper CSVs ---
+
     if not args.no_fights:
-        events_dataset.save(direct=True)
+        controller.save("fights",True)
     if not args.no_events:
-        fights_dataset.save(direct=True)
+        controller.save("events",direct=True)
     if not args.no_fighters:
-        fighters_dataset.save(direct=True)
+        controller.save("fighters",True)
+    if not args.no_fighters and not args.no_fights:
+        controller.save("fighter_fights",True)
 
     return 0
 
