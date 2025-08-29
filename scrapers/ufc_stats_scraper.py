@@ -71,12 +71,13 @@ class UFCStatsScraper(BaseScraper):
             for row in fight_rows:
                 cols = self.parse_elements(row,"td")
                 result = self.clean_text(self.parse_text(cols[0]))
-                opponent = self.clean_text(self.parse_text(self.parse_elements(cols[1],"a")[1]))
+                opponent = self.parse_id_from_url(self.parse_Tag_attribute(self.parse_elements(cols[1],"a")[1],"href"))
                 fight_id = self.parse_id_from_url(self.parse_Tag_attribute(row,"data-link"))
                 fights.append({
-                    "id": fight_id,
-                    "result":result,
+                    "fight": fight_id,
+                    "fighter":id,
                     "opponent":opponent,
+                    "result":result,
                     })
         except:
             fights = []
@@ -96,7 +97,6 @@ class UFCStatsScraper(BaseScraper):
             if early_stopping(id):
                 return data_collection
             data = self.scrape_fighter(id)
-            logger.info(data)
             data_collection.append(data)
         return data_collection
     
@@ -120,7 +120,7 @@ class UFCStatsScraper(BaseScraper):
 
         fight_details = {
             "id": id,
-            "event_id": event_id,
+            "event": event_id,
             "title": fight_title,
             "method": method,
         }
@@ -128,20 +128,9 @@ class UFCStatsScraper(BaseScraper):
         fighter_details = {}
         for index, fighter in enumerate(fighters):
             fighter_type = "red" if index == 0 else "blue"
-            name = self.clean_text(
-                self.parse_text(self.parse_element(fighter, "h3.b-fight-details__person-name a"))
-            )
-            nickname = self.clean_text(
-                self.parse_text(self.parse_element(fighter, "p.b-fight-details__person-title"))
-            )
-            result = self.clean_text(
-                self.parse_text(self.parse_element(fighter, "i.b-fight-details__person-status"))
-            )
-
+            fighter_id = self.parse_id_from_url(self.parse_Tag_attribute(self.parse_element(fighter, "h3.b-fight-details__person-name a"),"href"))
             fighter_details |= {
-                f"{fighter_type}_name": name,
-                f"{fighter_type}_nickname": nickname,
-                f"{fighter_type}_result": result,
+                f"{fighter_type}_id": fighter_id,
             }
 
         fight_details |= fighter_details
@@ -204,15 +193,20 @@ class UFCStatsScraper(BaseScraper):
         )
 
         fight_rows = self.parse_elements(soup, "tbody.b-fight-details__table-body tr.js-fight-details-click")
-        fight_links = [self.parse_Tag_attribute(row, "data-link") for row in fight_rows]
-        fight_ids = [self.parse_id_from_url(fight_link) for fight_link in fight_links]
-
+        fight_ids = []
+        fight_weights = []
+        for row in fight_rows:
+            fight_id = self.parse_id_from_url(self.parse_Tag_attribute(row, "data-link"))
+            fight_ids.append(fight_id)
+            weight = self.clean_text(self.parse_text(self.parse_element(row,"td.b-fight-details__table-col.l-page_align_left:nth-of-type(7)")))
+            fight_weights.append(weight)
         return {
             "id": id,
             "title": title,
             "date": date,
             "location": location,
             "fights": fight_ids,
+            "weights":fight_weights
         }
     
     def scrape_events(self, ids: list[str], early_stopping: Callable) -> list[dict]:
